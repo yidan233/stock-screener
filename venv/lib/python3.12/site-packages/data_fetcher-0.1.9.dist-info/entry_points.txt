@@ -1,0 +1,2 @@
+[console_scripts]
+data_fetcher = data_fetcher.cli:main
