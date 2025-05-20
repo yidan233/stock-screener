@@ -1,7 +1,4 @@
-# api.py
-"""
-Flask API for the stock screener.
-"""
+# created a flask based REST API for the stock screener 
 
 from ast import arg
 from flask import Flask, request, jsonify
@@ -26,14 +23,14 @@ screener = StockScreener()
 
 @app.route('/api/v1/indexes', methods=['GET'])
 def get_indexes():
-    """Get available stock indexes."""
     return jsonify({
         'indexes': ['sp500', 'nasdaq100', 'dow30']
     })
 
 @app.route('/api/v1/symbols/<index>', methods=['GET'])
+
+# return stock symbols for a given index
 def get_symbols(index):
-    """Get symbols for a given index."""
     try:
         symbols = screener.data_fetcher.get_stock_symbols(index=index)
         return jsonify({
@@ -47,20 +44,18 @@ def get_symbols(index):
             'error': str(e)
         }), 400
 
+# get info for a specific stock symbol
 @app.route('/api/v1/stock/<symbol>', methods=['GET'])
 def get_stock(symbol):
-    """Get data for a specific stock."""
     try:
-        # Ensure data is loaded
+        # hasattr to check if screnner has stock_data attribute
         if not hasattr(screener, 'stock_data') or not screener.stock_data:
             screener.load_data([symbol])
         elif symbol not in screener.stock_data:
-            # Only load this specific symbol
             data = screener.data_fetcher.fetch_yfinance_data([symbol])
             if data:
                 screener.stock_data[symbol] = data[symbol]
         
-        # Check if we have the data now
         if symbol not in screener.stock_data:
             return jsonify({
                 'error': f"Could not find data for symbol: {symbol}"
@@ -68,11 +63,8 @@ def get_stock(symbol):
         
         # Get the data
         stock_data = screener.stock_data[symbol]
-        
-        # Format the response
         info = stock_data.get('info', {})
-        
-        # Only include some key fields to keep the response size reasonable
+        # only respond these field 
         key_info_fields = [
             'symbol', 'shortName', 'longName', 'sector', 'industry',
             'marketCap', 'currentPrice', 'trailingPE', 'forwardPE',
@@ -81,7 +73,6 @@ def get_stock(symbol):
         
         filtered_info = {field: info.get(field) for field in key_info_fields if field in info}
         
-        # Format historical data if available
         historical = {}
         if 'historical' in stock_data and not stock_data['historical'].empty:
             hist = stock_data['historical']
@@ -111,9 +102,8 @@ def get_stock(symbol):
 
 @app.route('/api/v1/screen', methods=['POST'])
 def screen_stocks():
-    """Screen stocks based on criteria."""
     try:
-        # Get request data
+        # reads the json body from the request 
         data = request.get_json()
         
         if not data:
@@ -121,7 +111,7 @@ def screen_stocks():
                 'error': 'No data provided'
             }), 400
         
-        # Get parameters
+        # get parameters
         index = data.get('index', 'sp500')
         criteria = data.get('criteria', {})
         limit = data.get('limit', 50)
@@ -133,13 +123,9 @@ def screen_stocks():
                 'error': 'No screening criteria provided'
             }), 400
         
-        # Get symbols for the index
+       
         symbols = screener.data_fetcher.get_stock_symbols(index=index)
-        
-        # Load data
         screener.load_data(symbols, reload=reload)
-        
-        # Screen stocks
         results = screener.screen_stocks(criteria, limit=limit)
         
         return jsonify({
@@ -156,7 +142,6 @@ def screen_stocks():
 
 @app.route('/api/v1/technical', methods=['POST'])
 def technical_screen():
-    """Screen stocks based on technical criteria."""
     try:
         # Get request data
         data = request.get_json()
@@ -166,28 +151,21 @@ def technical_screen():
                 'error': 'No data provided'
             }), 400
         
-        # Get parameters
+
         index = data.get('index', 'sp500')
         criteria = data.get('criteria', {})
         limit = data.get('limit', 50)
         reload = data.get('reload', False)
-        
-        # Validate criteria
+
         if not criteria:
             return jsonify({
                 'error': 'No screening criteria provided'
             }), 400
-        
-        # Get symbols for the index
+
         symbols = screener.data_fetcher.get_stock_symbols(index=arg.index)
-        
-        # Load data
         screener.load_data(symbols, reload=reload)
-        
-        # Screen stocks by technical indicators
         results = screener.screen_by_technical(criteria)
-        
-        # Limit results
+
         if limit and len(results) > limit:
             results = results[:limit]
         
@@ -205,9 +183,8 @@ def technical_screen():
 
 @app.route('/api/v1/combined', methods=['POST'])
 def combined_screen():
-    """Screen stocks based on both fundamental and technical criteria."""
     try:
-        # Get request data
+ 
         data = request.get_json()
         
         if not data:
@@ -215,26 +192,21 @@ def combined_screen():
                 'error': 'No data provided'
             }), 400
         
-        # Get parameters
+      
         index = data.get('index', 'sp500')
         fundamental = data.get('fundamental', {})
         technical = data.get('technical', {})
         limit = data.get('limit', 50)
         reload = data.get('reload', False)
         
-        # Validate criteria
+
         if not fundamental and not technical:
             return jsonify({
                 'error': 'No screening criteria provided'
             }), 400
         
-        # Get symbols for the index
         symbols = screener.data_fetcher.get_stock_symbols(index=index)
-        
-        # Load data
         screener.load_data(symbols, reload=reload)
-        
-        # Screen stocks with combined criteria
         results = screener.create_combined_screen(fundamental, technical, limit=limit)
         
         return jsonify({
@@ -250,7 +222,6 @@ def combined_screen():
         }), 400
 
 if __name__ == '__main__':
-    # Load some initial data on startup
     try:
         logger.info("Preloading some stock data...")
         symbols = screener.data_fetcher.get_stock_symbols(index='dow30')  # Just the Dow 30 for quick startup

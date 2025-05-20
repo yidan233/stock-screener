@@ -1,7 +1,4 @@
-# cli.py
-"""
-Command-line interface for the stock screener.
-"""
+
 
 import argparse
 import json
@@ -10,27 +7,16 @@ import logging
 from datetime import datetime
 from screener import StockScreener
 
-# Set up logging
+# show time, logger name, level and msg 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
+# criteria_str could be like "market_cap>1000000000, pe_ratio<20, sector=Technology
+# returns the criteria as a dictionary 
 def parse_criteria(criteria_str):
-    """
-    Parse criteria string into a dictionary.
-    
-    Format:
-    - For operator conditions: "field>value, field2<value2"
-    - For exact match: "field=value"
-    
-    Example:
-    "market_cap>1000000000, pe_ratio<20, sector=Technology"
-    
-    Returns:
-        dict: Parsed criteria
-    """
     if not criteria_str:
         return {}
     
@@ -40,14 +26,13 @@ def parse_criteria(criteria_str):
     for part in parts:
         part = part.strip()
         
-        # Check for operator conditions
         for op in ['>=', '<=', '>', '<', '==', '!=']:
             if op in part:
                 field, value_str = part.split(op, 1)
                 field = field.strip()
                 value_str = value_str.strip()
                 
-                # Convert value to appropriate type
+                # Convert value type (string -> number)
                 try:
                     if '.' in value_str:
                         value = float(value_str)
@@ -59,19 +44,18 @@ def parse_criteria(criteria_str):
                 criteria[field] = (op, value)
                 break
         else:
-            # No operator found, check for exact match
+            # No operator found, check for exact match -> value directly 
             if '=' in part:
                 field, value = part.split('=', 1)
                 field = field.strip()
                 value = value.strip()
                 
-                # For exact match, store the value directly
                 criteria[field] = value
     
     return criteria
 
+
 def main():
-    """Main entry point for the CLI."""
     parser = argparse.ArgumentParser(description='Stock Screener CLI')
     parser.add_argument('--index', choices=['sp500', 'nasdaq100', 'dow30'], default='sp500',
                         help='Stock index to use')
@@ -91,8 +75,7 @@ def main():
     
     # Create stock screener
     screener = StockScreener()
-    
-    # Get symbols from index
+
     logger.info(f"Getting symbols from {args.index}")
     symbols = screener.data_fetcher.get_stock_symbols(index=args.index)
     
@@ -100,7 +83,7 @@ def main():
     logger.info(f"Loading data for {len(symbols)} symbols (reload={args.reload})")
     screener.load_data(symbols, reload=args.reload)
     
-    # Parse criteria
+    # criteria
     criteria = parse_criteria(args.criteria)
     
     if not criteria:
@@ -112,15 +95,16 @@ def main():
     
     logger.info(f"Screening with criteria: {criteria}")
     
-    # Screen stocks
+
     results = screener.screen_stocks(criteria, limit=args.limit)
     
     logger.info(f"Found {len(results)} matching stocks")
     
-    # Output results
+   # output formats - console, json, csv
     if args.output == 'console':
         print(f"\nFound {len(results)} stocks matching criteria:")
         print("=" * 80)
+        # columns header: 
         print(f"{'Symbol':<10} {'Name':<30} {'Sector':<20} {'Market Cap':>15} {'Price':>10}")
         print("-" * 80)
         for stock in results:
