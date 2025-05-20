@@ -1,0 +1,4 @@
+solve FIX/IDEAS 
+add database 
+add the language model 
+add the backtest 
