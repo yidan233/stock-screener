@@ -1,9 +1,18 @@
-import subprocess
+import unittest
+import sys
 import os
+import subprocess
 import json
 import csv
 
-CLI_PATH = "cli.py"
+# Add the parent directory to the Python path so that app/ is importable
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# (If you have a cli function, uncomment and replace with your actual import, e.g.:
+# from app.cli import run_cli
+# )
+
+CLI_PATH = "app/cli.py"
 
 def run_cli(args):
     """Helper to run the CLI and capture output."""
@@ -93,4 +102,7 @@ def test_help():
     )
     assert "usage:" in result.stdout
     assert "--criteria" in result.stdout
+
+if __name__ == '__main__':
+    unittest.main()
 

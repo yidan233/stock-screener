@@ -6,7 +6,7 @@ Main entry point for the stock screener application.
 import argparse
 import logging
 import sys
-from api import app
+from app.api import app
 
 # Set up logging
 logging.basicConfig(

@@ -5,7 +5,7 @@ import json
 import sys
 import logging
 from datetime import datetime
-from screener import StockScreener
+from app.screener.screener import StockScreener
 
 # show time, logger name, level and msg 
 logging.basicConfig(

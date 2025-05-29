@@ -1,4 +1,12 @@
-from screener import StockScreener
+import unittest
+import sys
+import os
+
+# Add the parent directory to the Python path so that app/ is importable
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.screener.screener import StockScreener
+from app.indicators.indicators import TechnicalIndicators
 
 screener = StockScreener()
 symbols = ["AAPL", "MSFT", "GOOGL"]
@@ -20,3 +28,6 @@ results = screener.screen_stocks(criteria)
 print(f"Found {len(results)} stocks matching the criteria:")
 for stock in results:
     print(f"{stock['symbol']} - {stock['name']} (Market Cap: ${stock['market_cap']:,.0f}, Price: ${stock['price']})")
+
+if __name__ == '__main__':
+    unittest.main()

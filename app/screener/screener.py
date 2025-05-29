@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 import logging
 import operator
-from data_fetcher import DataFetcher
-from indicators import TechnicalIndicators
+from app.data.fetcher import DataFetcher
+from app.indicators.indicators import TechnicalIndicators
 
 
 # Set up logging

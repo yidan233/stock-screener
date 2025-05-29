@@ -1,5 +1,4 @@
-
-from data_fetcher import DataFetcher
+from app.data.fetcher import DataFetcher
 
 fetcher = DataFetcher()
 
