@@ -1,5 +1,4 @@
 from app.screener.screener import StockScreener
-from app.config import ALPHA_VANTAGE_API_KEY
 from app.data.fetcher import DataFetcher
 
 # Create a screener instance

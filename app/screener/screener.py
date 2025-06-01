@@ -9,7 +9,7 @@ from app.indicators.indicators import TechnicalIndicators
 
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 class StockScreener:
@@ -35,47 +35,14 @@ class StockScreener:
     # interval: data interval (e.g., '1d', '1wk', '1mo')
     # returns a dictionary with stock data for each symbol
     def load_data(self, symbols=None, reload=False, period="1y", interval="1d"):
-        # defaulted to S&P 500 if no symbols are provided
+        # Default to S&P 500 if no symbols are provided
         if symbols is None:
             symbols = self.data_fetcher.get_stock_symbols(index="sp500")
             logger.info(f"Loaded {len(symbols)} symbols from S&P 500")
         
-        # ideas: use cache metadata to check if we have all the symbols we need, and use the cache file to load the data
-        cache_file = f"stock_data_{period}_{interval}.json"
-        # cache file: main cache file stores the actual stock data 
-        cache_metadata_file = f"stock_data_{period}_{interval}_metadata.json"
-        # cache metadata file: stores the metadata about the stock data (e.g., symbols, period, interval)
-      
-        if not reload: # try from cache 
-            metadata = self.data_fetcher.load_from_cache(cache_metadata_file)
-            if metadata is not None:
-                # Check if we have all the symbols we need
-                cached_symbols = set(metadata.get('symbols', []))
-                requested_symbols = set(symbols)
-
-                 # We have all the symbols in cache, load the data
-                if requested_symbols.issubset(cached_symbols):
-                    self.stock_data = self.data_fetcher.load_from_cache(cache_file)
-                    if self.stock_data is not None:
-                        logger.info(f"Loaded {len(self.stock_data)} stocks from cache")
-                        return self.stock_data
-        
-        # cache is disables or not all symbols found
+        # Fetch new data if needed
         logger.info(f"Fetching stock data for {len(symbols)} symbols")
-        self.stock_data = self.data_fetcher.fetch_yfinance_data(symbols, period, interval)
-        
-        # Save to cache
-        self.data_fetcher.save_to_cache(self.stock_data, cache_file)
-        
-        # Save metadata
-        metadata = {
-            'symbols': list(self.stock_data.keys()),
-            'period': period,
-            'interval': interval,
-            'last_updated': datetime.now().isoformat()
-        }
-        self.data_fetcher.save_to_cache(metadata, cache_metadata_file)
-        logger.info(f"Fetched and cached data for {len(self.stock_data)} stocks")
+        self.stock_data = self.data_fetcher.fetch_yfinance_data(symbols, period, interval, reload=reload)
         return self.stock_data
     
     # it checks if a stock meets the screening criteria
@@ -89,7 +56,6 @@ class StockScreener:
                 }
     """
     def apply_criteria(self, stock_info, criteria):
-       # map user friendly field names to actual field names in the stock_info dictionary
         field_mapping = {
             'market_cap': 'marketCap',
             'pe_ratio': 'trailingPE',
@@ -112,9 +78,8 @@ class StockScreener:
             'price': 'currentPrice'
         }
         exact_match_fields = ['sector', 'industry', 'country']
-       
+        
         for field, condition in criteria.items():
-            # case1: exact match fields -> needs to be exact the same 
             if field in exact_match_fields:
                 expected_value = condition
                 actual_value = stock_info.get(field, '')
@@ -122,7 +87,6 @@ class StockScreener:
                     return False
                 continue
             
-            # case2: numeric fields -> needs to be compared with the operator
             if isinstance(condition, tuple) and len(condition) == 2:
                 op_symbol, threshold = condition
                 info_field = field_mapping.get(field, field)
@@ -130,8 +94,8 @@ class StockScreener:
                 
                 if actual_value is None:
                     return False
+                
                 op_func = self.OPERATORS.get(op_symbol)
-
                 if op_func is None:
                     logger.error(f"Unknown operator: {op_symbol}")
                     return False

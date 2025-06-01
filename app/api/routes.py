@@ -5,12 +5,12 @@ from flask import Flask, request, jsonify
 import logging
 import traceback
 from datetime import datetime
-from screener import StockScreener
+from app.screener.screener import StockScreener
 from flask import Flask, request, jsonify, render_template_string
 
 # Set up logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.ERROR,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)

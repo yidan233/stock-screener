@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 # criteria_str could be like "market_cap>1000000000, pe_ratio<20, sector=Technology
 # returns the criteria as a dictionary 
+
 def parse_criteria(criteria_str):
     if not criteria_str:
         return {}
@@ -70,7 +71,7 @@ def main():
                         help='Output file for JSON or CSV output')
     parser.add_argument('--reload', action='store_true',
                         help='Force reload of stock data')
-    
+
     args = parser.parse_args()
     
     # Create stock screener
