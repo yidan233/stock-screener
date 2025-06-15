@@ -7,6 +7,7 @@ import traceback
 from datetime import datetime
 from app.screener.screener import StockScreener
 from flask import Flask, request, jsonify, render_template_string
+import pandas as pd
 
 # Set up logging
 logging.basicConfig(
@@ -15,21 +16,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
+# Initialize Flask app and the stock screener 
 app = Flask(__name__)
-
-# Initialize stock screener
 screener = StockScreener()
-
+# return list of available stock indexes
 @app.route('/api/v1/indexes', methods=['GET'])
 def get_indexes():
     return jsonify({
         'indexes': ['sp500', 'nasdaq100', 'dow30']
     })
 
+# get all symbol based on the stock indexes 
 @app.route('/api/v1/symbols/<index>', methods=['GET'])
-
-# return stock symbols for a given index
 def get_symbols(index):
     try:
         symbols = screener.data_fetcher.get_stock_symbols(index=index)
@@ -48,43 +46,74 @@ def get_symbols(index):
 @app.route('/api/v1/stock/<symbol>', methods=['GET'])
 def get_stock(symbol):
     try:
-        # hasattr to check if screnner has stock_data attribute
-        if not hasattr(screener, 'stock_data') or not screener.stock_data:
-            screener.load_data([symbol])
-        elif symbol not in screener.stock_data:
-            data = screener.data_fetcher.fetch_yfinance_data([symbol])
-            if data:
-                screener.stock_data[symbol] = data[symbol]
+        # Fetch data directly from yfinance
+        data = screener.data_fetcher.fetch_yfinance_data([symbol], reload=True)
+        if not data or symbol not in data:
+            return jsonify({'error': f"Could not find data for symbol: {symbol}"}), 404
+
+        stock_data = data[symbol]
         
-        if symbol not in screener.stock_data:
-            return jsonify({
-                'error': f"Could not find data for symbol: {symbol}"
-            }), 404
-        
-        # Get the data
-        stock_data = screener.stock_data[symbol]
+        # Debug: Print the raw info data
+        logger.info(f"Raw info data for {symbol}: {stock_data.get('info', {})}")
+
+        # Format the info and historical data
         info = stock_data.get('info', {})
-        # only respond these field 
         key_info_fields = [
             'symbol', 'shortName', 'longName', 'sector', 'industry',
             'marketCap', 'currentPrice', 'trailingPE', 'forwardPE',
             'dividendYield', 'beta', 'fiftyTwoWeekHigh', 'fiftyTwoWeekLow'
         ]
-        
         filtered_info = {field: info.get(field) for field in key_info_fields if field in info}
-        
+
         historical = {}
-        if 'historical' in stock_data and not stock_data['historical'].empty:
-            hist = stock_data['historical']
-            historical = {
-                'dates': hist.index.strftime('%Y-%m-%d').tolist(),
-                'open': hist['Open'].tolist(),
-                'high': hist['High'].tolist(),
-                'low': hist['Low'].tolist(),
-                'close': hist['Close'].tolist(),
-                'volume': hist['Volume'].tolist()
+        hist = stock_data.get('historical')
+        if hist is not None and not hist.empty:
+            # Debug: Print the actual columns we receive
+            logger.info(f"Original columns for {symbol}: {hist.columns}")
+            
+            # Handle MultiIndex columns if present
+            if isinstance(hist.columns, pd.MultiIndex):
+                # Debug: Print the MultiIndex structure
+                logger.info(f"MultiIndex columns for {symbol}: {hist.columns.levels}")
+                
+                # Flatten MultiIndex columns
+                hist.columns = ['_'.join(col).strip() if isinstance(col, tuple) else col for col in hist.columns.values]
+                logger.info(f"Flattened columns for {symbol}: {hist.columns}")
+            
+            # Create column mapping for symbol-prefixed columns
+            column_mapping = {
+                f'{symbol}_Open': 'Open',
+                f'{symbol}_High': 'High',
+                f'{symbol}_Low': 'Low',
+                f'{symbol}_Close': 'Close',
+                f'{symbol}_Volume': 'Volume',
+                f'{symbol}_Adj Close': 'Adj Close'
             }
-        
+            
+            # Only rename columns that exist
+            existing_columns = {k: v for k, v in column_mapping.items() if k in hist.columns}
+            hist = hist.rename(columns=existing_columns)
+            logger.info(f"Renamed columns for {symbol}: {hist.columns}")
+
+            # Ensure we have the required columns
+            required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+            available_columns = hist.columns.tolist()
+            logger.info(f"Available columns for {symbol}: {available_columns}")
+            
+            if all(col in hist.columns for col in required_columns):
+                historical = {
+                    'dates': hist.index.strftime('%Y-%m-%d').tolist(),
+                    'open': hist['Open'].tolist(),
+                    'high': hist['High'].tolist(),
+                    'low': hist['Low'].tolist(),
+                    'close': hist['Close'].tolist(),
+                    'volume': hist['Volume'].tolist()
+                }
+            else:
+                missing_columns = [col for col in required_columns if col not in hist.columns]
+                logger.error(f"Missing columns in historical data for {symbol}. Missing: {missing_columns}, Available: {available_columns}")
+                return jsonify({'error': f"Missing columns in historical data for {symbol}. Available columns: {available_columns}"}), 500
+
         response = {
             'symbol': symbol,
             'info': filtered_info,
@@ -92,14 +121,52 @@ def get_stock(symbol):
         }
         
         return jsonify(response)
-    
+
     except Exception as e:
         logger.error(f"Error getting data for {symbol}: {e}")
         logger.error(traceback.format_exc())
-        return jsonify({
-            'error': str(e)
-        }), 400
+        return jsonify({'error': str(e)}), 400
 
+def parse_criteria(criteria_str):
+    """Parse criteria string into dictionary format"""
+    if not criteria_str:
+        return {}
+    
+    criteria = {}
+    parts = criteria_str.split(',')
+    
+    for part in parts:
+        part = part.strip()
+        
+        for op in ['>=', '<=', '>', '<', '==', '!=']:
+            if op in part:
+                field, value_str = part.split(op, 1)
+                field = field.strip()
+                value_str = value_str.strip()
+                
+                # Convert value type (string -> number)
+                try:
+                    if '.' in value_str:
+                        value = float(value_str)
+                    else:
+                        value = int(value_str)
+                except ValueError:
+                    value = value_str
+                
+                criteria[field] = (op, value)
+                break
+        else:
+            # No operator found, check for exact match -> value directly 
+            if '=' in part:
+                field, value = part.split('=', 1)
+                field = field.strip()
+                value = value.strip()
+                
+                criteria[field] = value
+    
+    return criteria
+
+# screen stocks 
 @app.route('/api/v1/screen', methods=['POST'])
 def screen_stocks():
     try:
@@ -111,19 +178,25 @@ def screen_stocks():
                 'error': 'No data provided'
             }), 400
         
-        # get parameters
+        # get parameters with default value 
         index = data.get('index', 'sp500')
-        criteria = data.get('criteria', {})
+        criteria_str = data.get('criteria', '') # Criteria is now a string
         limit = data.get('limit', 50)
         reload = data.get('reload', False)
         
-        # Validate criteria
-        if not criteria:
-            return jsonify({
-                'error': 'No screening criteria provided'
-            }), 400
+        # Parse criteria string into dictionary, same as CLI
+        criteria = parse_criteria(criteria_str)
         
-       
+        # If no criteria provided, use default criteria like CLI
+        if not criteria:
+            logger.warning("No criteria specified. Using default criteria.")
+            criteria = {
+                'market_cap': ('>', 1e9),  # Market cap > $1 billion
+                'pe_ratio': ('<', 30)      # P/E ratio < 30
+            }
+        
+        logger.info(f"Screening with criteria: {criteria}")
+        
         symbols = screener.data_fetcher.get_stock_symbols(index=index)
         screener.load_data(symbols, reload=reload)
         results = screener.screen_stocks(criteria, limit=limit)
@@ -139,99 +212,6 @@ def screen_stocks():
         return jsonify({
             'error': str(e)
         }), 400
-
-@app.route('/api/v1/technical', methods=['POST'])
-def technical_screen():
-    try:
-        # Get request data
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({
-                'error': 'No data provided'
-            }), 400
-        
-
-        index = data.get('index', 'sp500')
-        criteria = data.get('criteria', {})
-        limit = data.get('limit', 50)
-        reload = data.get('reload', False)
-
-        if not criteria:
-            return jsonify({
-                'error': 'No screening criteria provided'
-            }), 400
-
-        symbols = screener.data_fetcher.get_stock_symbols(index=arg.index)
-        screener.load_data(symbols, reload=reload)
-        results = screener.screen_by_technical(criteria)
-
-        if limit and len(results) > limit:
-            results = results[:limit]
-        
-        return jsonify({
-            'count': len(results),
-            'stocks': results
-        })
-    
-    except Exception as e:
-        logger.error(f"Error in technical screening: {e}")
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'error': str(e)
-        }), 400
-
-@app.route('/api/v1/combined', methods=['POST'])
-def combined_screen():
-    try:
- 
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({
-                'error': 'No data provided'
-            }), 400
-        
-      
-        index = data.get('index', 'sp500')
-        fundamental = data.get('fundamental', {})
-        technical = data.get('technical', {})
-        limit = data.get('limit', 50)
-        reload = data.get('reload', False)
-        
-
-        if not fundamental and not technical:
-            return jsonify({
-                'error': 'No screening criteria provided'
-            }), 400
-        
-        symbols = screener.data_fetcher.get_stock_symbols(index=index)
-        screener.load_data(symbols, reload=reload)
-        results = screener.create_combined_screen(fundamental, technical, limit=limit)
-        
-        return jsonify({
-            'count': len(results),
-            'stocks': results
-        })
-    
-    except Exception as e:
-        logger.error(f"Error in combined screening: {e}")
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'error': str(e)
-        }), 400
-
-if __name__ == '__main__':
-    try:
-        logger.info("Preloading some stock data...")
-        symbols = screener.data_fetcher.get_stock_symbols(index='dow30')  # Just the Dow 30 for quick startup
-        screener.load_data(symbols)
-        logger.info(f"Preloaded data for {len(symbols)} stocks")
-    except Exception as e:
-        logger.error(f"Error preloading data: {e}")
-    
-    # Run the app
-    app.run(debug=True, host='0.0.0.0', port=5000)
 
 API_DOCS_HTML = """
 <!DOCTYPE html>

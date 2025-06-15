@@ -52,7 +52,7 @@ def main():
         logger.info("Starting in API mode")
         # Ensure this import is only done when in API mode to avoid issues
         from app.api.routes import app 
-        app.run(debug=True, host='0.0.0.0', port=5000)
+        app.run(debug=True, host='0.0.0.0', port=5000) # running at port 5000!
     # ADDED WEB MODE LOGIC
     elif args.mode == 'web':
         logger.info("Starting in Web mode (Streamlit)")
