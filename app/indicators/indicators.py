@@ -1,6 +1,3 @@
-# just how each indicators is calculated 
-# add new if you want 
-
 import numpy as np
 import pandas as pd
 
@@ -15,6 +12,9 @@ import pandas as pd
 # 8. Stochastic Oscillator
 # 9. Rate of Change (ROC)
 
+
+# TASK TO COMPLETE: currently we are using the default parameter
+# should allows user to input their own parameter 
 class TechnicalIndicators:
   
     @staticmethod

@@ -1,9 +1,0 @@
-solve FIX/IDEAS - low piority
-add database  -- by thursday 
-add the language model -- by the end of this month 
-add backtest ? 
-front end? 
-
-------------------------------------------------------------
-june - opensource project + keep refining this model 
-july kaggle competition + web project 
