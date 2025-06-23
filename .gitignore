@@ -80,7 +80,6 @@ venv/
 .venv/
 
 # Data files and caches
-data/
 *.json
 *.csv
 
